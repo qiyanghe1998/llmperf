@@ -1,0 +1,5 @@
+click>=8.0          # CLI framework
+openai>=0.27        # OpenAI API client
+vllm>=0.7           # vLLM inference engine
+pytest>=7.0         # Test runner
+flake8>=5.0         # Linter
