@@ -1,0 +1,4 @@
+-r requirements-core.txt
+-r requirements-dev.txt
+# vLLM intentionally omitted on macOS
+
