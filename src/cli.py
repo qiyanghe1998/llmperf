@@ -10,15 +10,41 @@ from typing import List, Optional, Dict, Any
 
 from .plugins import BaseLLMBackend
 from .plugins.openai import OpenAIBackend
-from .plugins.vllm import VLLMBackend
-from .plugins.ollama import OllamaBackend
 from .plugins.example import ExampleBackend
+
+# Import other backends only when needed
+import sys
+if sys.platform != 'darwin':
+    from .plugins.vllm import VLLMBackend
+
+# Import Ollama only if aiohttp is available
+try:
+    from .plugins.ollama import OllamaBackend
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    OLLAMA_AVAILABLE = False
 
 
 def load_prompts(prompt_file: str) -> List[str]:
     """Load prompts from a text file, one per line."""
     with open(prompt_file, 'r', encoding='utf-8') as f:
         return [line.strip() for line in f if line.strip()]
+
+
+def load_config(config_file: str = "config.env") -> Dict[str, str]:
+    """Load configuration from a file."""
+    config = {}
+    config_path = Path(config_file)
+    
+    if config_path.exists():
+        with open(config_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    config[key.strip()] = value.strip()
+    
+    return config
 
 
 def save_results_json(results: List[Dict[str, Any]], output_file: str):
@@ -44,9 +70,15 @@ def get_backend(model_name: str, backend_type: str = "auto", **kwargs) -> BaseLL
     if backend_type == "openai" or model_name.startswith("gpt-") or model_name.startswith("o1-"):
         return OpenAIBackend(model_name, **kwargs)
     elif backend_type == "vllm" or model_name.startswith("http://") or model_name.startswith("https://"):
-        return VLLMBackend(model_name, **kwargs)
+        if sys.platform != 'darwin':
+            return VLLMBackend(model_name, **kwargs)
+        else:
+            raise ValueError("vLLM backend is not supported on macOS")
     elif backend_type == "ollama":
-        return OllamaBackend(model_name, **kwargs)
+        if OLLAMA_AVAILABLE:
+            return OllamaBackend(model_name, **kwargs)
+        else:
+            raise ValueError("Ollama backend requires aiohttp to be installed")
     elif backend_type == "example":
         return ExampleBackend(model_name, **kwargs)
     else:
@@ -54,10 +86,16 @@ def get_backend(model_name: str, backend_type: str = "auto", **kwargs) -> BaseLL
         if model_name.startswith("gpt-") or model_name.startswith("o1-"):
             return OpenAIBackend(model_name, **kwargs)
         elif model_name.startswith("http://") or model_name.startswith("https://"):
-            return VLLMBackend(model_name, **kwargs)
+            if sys.platform != 'darwin':
+                return VLLMBackend(model_name, **kwargs)
+            else:
+                raise ValueError("vLLM backend is not supported on macOS")
         else:
-            # Default to Ollama for local models
-            return OllamaBackend(model_name, **kwargs)
+            # Default to Ollama for local models if available, otherwise example
+            if OLLAMA_AVAILABLE:
+                return OllamaBackend(model_name, **kwargs)
+            else:
+                return ExampleBackend(model_name, **kwargs)
 
 
 @click.group()
@@ -88,12 +126,20 @@ def run(model: str, prompt_file: str, output: str, max_tokens: Optional[int],
         click.echo("No prompts found in file", err=True)
         return
     
+    # Load configuration
+    config = load_config()
+    
     # Get backend
     backend_kwargs = {}
     if api_key:
         backend_kwargs['api_key'] = api_key
+    elif config.get('OPENAI_API_KEY') and config['OPENAI_API_KEY'] != 'your-api-key-here':
+        backend_kwargs['api_key'] = config['OPENAI_API_KEY']
+    
     if base_url:
         backend_kwargs['base_url'] = base_url
+    elif config.get('OPENAI_BASE_URL'):
+        backend_kwargs['base_url'] = config['OPENAI_BASE_URL']
     
     llm_backend = get_backend(model, backend, **backend_kwargs)
     
@@ -162,12 +208,20 @@ def profile(model: str, prompt_file: str, output: str, max_tokens: Optional[int]
         click.echo("No prompts found in file", err=True)
         return
     
+    # Load configuration
+    config = load_config()
+    
     # Get backend
     backend_kwargs = {}
     if api_key:
         backend_kwargs['api_key'] = api_key
+    elif config.get('OPENAI_API_KEY') and config['OPENAI_API_KEY'] != 'your-api-key-here':
+        backend_kwargs['api_key'] = config['OPENAI_API_KEY']
+    
     if base_url:
         backend_kwargs['base_url'] = base_url
+    elif config.get('OPENAI_BASE_URL'):
+        backend_kwargs['base_url'] = config['OPENAI_BASE_URL']
     
     llm_backend = get_backend(model, backend, **backend_kwargs)
     
@@ -255,12 +309,20 @@ def batch(model: str, prompt_file: str, output: str, batch_size: int,
         click.echo("No prompts found in file", err=True)
         return
     
+    # Load configuration
+    config = load_config()
+    
     # Get backend
     backend_kwargs = {}
     if api_key:
         backend_kwargs['api_key'] = api_key
+    elif config.get('OPENAI_API_KEY') and config['OPENAI_API_KEY'] != 'your-api-key-here':
+        backend_kwargs['api_key'] = config['OPENAI_API_KEY']
+    
     if base_url:
         backend_kwargs['base_url'] = base_url
+    elif config.get('OPENAI_BASE_URL'):
+        backend_kwargs['base_url'] = config['OPENAI_BASE_URL']
     
     llm_backend = get_backend(model, backend, **backend_kwargs)
     
@@ -357,12 +419,20 @@ def stream(model: str, prompt_file: str, output: str, max_tokens: Optional[int],
         click.echo("No prompts found in file", err=True)
         return
     
+    # Load configuration
+    config = load_config()
+    
     # Get backend
     backend_kwargs = {}
     if api_key:
         backend_kwargs['api_key'] = api_key
+    elif config.get('OPENAI_API_KEY') and config['OPENAI_API_KEY'] != 'your-api-key-here':
+        backend_kwargs['api_key'] = config['OPENAI_API_KEY']
+    
     if base_url:
         backend_kwargs['base_url'] = base_url
+    elif config.get('OPENAI_BASE_URL'):
+        backend_kwargs['base_url'] = config['OPENAI_BASE_URL']
     
     llm_backend = get_backend(model, backend, **backend_kwargs)
     

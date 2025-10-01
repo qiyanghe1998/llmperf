@@ -78,20 +78,48 @@ pip install llmperf
 
 ## Quickstart
 
-1. Prepare a text file of prompts, one per line:
+1. **Setup configuration** (recommended):
+    ```bash
+    # Copy example config
+    cp config.env.example config.env
+    
+    # Edit config.env with your API key
+    # OPENAI_API_KEY=sk-your-actual-key-here
     ```
+
+2. **Prepare prompts**:
+    ```bash
     echo "Hello, world!" > prompts.txt
     echo "What is the capital of France?" >> prompts.txt
     ```
-2. Run an example against OpenAI (set your API key first):
+
+3. **Run experiments**:
+    ```bash
+    # Using config file (API key loaded automatically)
+    python -m src.cli run --model gpt-4o-mini --prompt-file prompts.txt --output results.json
+    
+    # Or with explicit API key
+    python -m src.cli run --model gpt-4o-mini --prompt-file prompts.txt --output results.json --api-key sk-your-key
     ```
-    export OPENAI_API_KEY=...  # or put this in a .env
-    llmperf run \
-      --model gpt-4o-mini \
-      --prompt-file prompts.txt \
-      --output results.json
-    ```
-3. Inspect results.json for token-level latency and output text.
+
+4. **Inspect results**: Check `results.json` for token-level latency and output text.
+
+### Platform-Specific Examples
+
+**macOS (OpenAI + Ollama)**:
+```bash
+# OpenAI (requires API key in config.env)
+python -m src.cli run --model gpt-4o-mini --prompt-file prompts.txt --output results.json
+
+# Ollama (local, no API key needed)
+python -m src.cli run --model llama3:latest --prompt-file prompts.txt --output results.json --backend ollama
+```
+
+**Linux (All backends)**:
+```bash
+# vLLM (local server)
+python -m src.cli run --model http://localhost:8000/v1 --prompt-file prompts.txt --output results.json --backend vllm
+```
 
 Optional (Linux/GPU only): run against a local vLLM server. Start vLLM separately, then:
 ```
@@ -121,6 +149,30 @@ Common options:
 - --output PATH (.json or .csv)
 
 Run llmperf COMMAND --help for full option lists and examples.
+
+## Configuration
+
+llmperf supports configuration files for easier API key management:
+
+### Setup
+```bash
+# Copy example configuration
+cp config.env.example config.env
+
+# Edit config.env with your settings
+# OPENAI_API_KEY=sk-your-actual-key-here
+# OPENAI_BASE_URL=https://api.openai.com/v1  # optional
+```
+
+### Usage
+- **Config file**: API keys loaded automatically from `config.env`
+- **Command-line override**: `--api-key` and `--base-url` override config file
+- **Environment variables**: Still supported as fallback
+
+### Security
+- `config.env` is excluded from git by default
+- Never commit API keys to version control
+- Use `config.env.example` as a template
 
 ## Development
 
