@@ -17,6 +17,10 @@ test_config.json
 results_example.json
 results_stream.json
 
+# Datasets and prompts
+datasets/
+prompts_*.txt
+
 # Python
 __pycache__/
 *.py[cod]
