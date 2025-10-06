@@ -29,19 +29,16 @@ def download_wikitext():
         dataset = load_dataset('Salesforce/wikitext', 'wikitext-2-raw-v1', split='test')
         print(f"✓ Wikitext-2 loaded: {len(dataset)} samples")
         
-        # Save first 50 non-empty samples as prompts
+        # Save all non-empty samples as prompts
         prompts = []
         for item in dataset:
             text = item['text'].strip()
-            if text and len(text) > 50:  # Filter out short/empty texts
+            if text:
                 prompts.append(text)
-                if len(prompts) >= 50:
-                    break
         
         with open('datasets/prompts_wikitext.txt', 'w', encoding='utf-8') as f:
             for prompt in prompts:
-                # Truncate to first 200 chars for manageable prompt size
-                f.write(prompt[:200] + '\n')
+                f.write(prompt + '\n')
         
         print(f"✓ Saved {len(prompts)} prompts to datasets/prompts_wikitext.txt")
         return dataset
@@ -64,12 +61,9 @@ def download_mmlu():
         dataset = load_dataset('cais/mmlu', 'all', split='test')
         print(f"✓ MMLU loaded: {len(dataset)} samples")
         
-        # Create prompts from first 50 questions
+        # Create prompts from all questions
         prompts = []
-        for i, item in enumerate(dataset):
-            if i >= 50:
-                break
-            
+        for item in dataset:
             question = item['question']
             choices = item['choices']
             
@@ -105,12 +99,9 @@ def download_humaneval():
         dataset = load_dataset('openai/openai_humaneval', split='test')
         print(f"✓ HumanEval loaded: {len(dataset)} samples")
         
-        # Create prompts from first 50 problems
+        # Create prompts from all problems
         prompts = []
-        for i, item in enumerate(dataset):
-            if i >= 50:
-                break
-            
+        for item in dataset:
             prompt = item['prompt']
             prompts.append(prompt.strip())
         
