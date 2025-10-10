@@ -4,6 +4,10 @@ import asyncio
 import time
 import aiohttp
 from typing import Dict, List, Optional, Any, AsyncGenerator
+try:
+    import psutil  # optional, for CPU/memory sampling
+except Exception:  # pragma: no cover
+    psutil = None
 
 from .base import BaseLLMBackend, InferenceResult, TokenMetrics, BatchResult
 
@@ -30,6 +34,7 @@ class OllamaBackend(BaseLLMBackend):
     ) -> InferenceResult:
         """Generate text from a prompt using Ollama API."""
         start_time = time.time()
+        process = psutil.Process() if psutil else None
         
         payload = {
             "model": self.model_name,
@@ -58,11 +63,30 @@ class OllamaBackend(BaseLLMBackend):
                         
                         # Extract response data
                         text = data.get("response", "")
-                        
-                        # Calculate token counts (rough estimation)
-                        input_tokens = len(prompt.split())
-                        output_tokens = len(text.split())
+
+                        # Use Ollama's returned metrics if present
+                        prompt_eval_count = data.get("prompt_eval_count")
+                        eval_count = data.get("eval_count")
+                        prompt_eval_duration_ns = data.get("prompt_eval_duration")
+                        eval_duration_ns = data.get("eval_duration")
+
+                        input_tokens = int(prompt_eval_count) if isinstance(prompt_eval_count, int) else 0
+                        output_tokens = int(eval_count) if isinstance(eval_count, int) else 0
                         total_tokens = input_tokens + output_tokens
+
+                        # Tokens/sec from eval duration (output side)
+                        tokens_per_sec = None
+                        if isinstance(eval_duration_ns, int) and eval_duration_ns > 0 and output_tokens > 0:
+                            tokens_per_sec = (output_tokens / (eval_duration_ns / 1e9))
+
+                        cpu_percent = None
+                        mem_rss_mb = None
+                        if process:
+                            try:
+                                cpu_percent = process.cpu_percent(interval=None)
+                                mem_rss_mb = process.memory_info().rss / (1024 * 1024)
+                            except Exception:
+                                pass
                         
                         return InferenceResult(
                             text=text,
@@ -70,9 +94,12 @@ class OllamaBackend(BaseLLMBackend):
                             input_tokens=input_tokens,
                             output_tokens=output_tokens,
                             total_latency_ms=total_latency_ms,
-                            first_token_latency_ms=total_latency_ms * 0.1,  # Rough estimation
+                            first_token_latency_ms=None,
                             model_name=self.model_name,
-                            cost=0.0  # Local inference is free
+                            cost=0.0,  # Local inference is free
+                            tokens_per_sec=tokens_per_sec,
+                            cpu_percent=cpu_percent,
+                            mem_rss_mb=mem_rss_mb
                         )
                     else:
                         error_text = await response.text()
@@ -112,6 +139,7 @@ class OllamaBackend(BaseLLMBackend):
     ) -> AsyncGenerator[TokenMetrics, None]:
         """Generate text with streaming token metrics using Ollama API."""
         start_time = time.time()
+        process = psutil.Process() if psutil else None
         
         payload = {
             "model": self.model_name,
@@ -143,7 +171,6 @@ class OllamaBackend(BaseLLMBackend):
                                     if "response" in data:
                                         current_time = time.time()
                                         latency_ms = (current_time - start_time) * 1000
-                                        
                                         yield TokenMetrics(
                                             token=data["response"],
                                             timestamp=current_time,

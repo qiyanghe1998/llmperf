@@ -163,6 +163,9 @@ def run(model: str, prompt_file: str, output: str, max_tokens: Optional[int],
                 'output_tokens': result.output_tokens,
                 'total_latency_ms': result.total_latency_ms,
                 'first_token_latency_ms': result.first_token_latency_ms,
+                'tokens_per_sec': result.tokens_per_sec,
+                'cpu_percent': result.cpu_percent,
+                'mem_rss_mb': result.mem_rss_mb,
                 'cost': result.cost,
                 'model_name': result.model_name
             }
@@ -252,8 +255,24 @@ def profile(model: str, prompt_file: str, output: str, max_tokens: Optional[int]
                     }
                     for tm in token_metrics
                 ],
+                # Streaming latency stats (including p95/p99)
+                'p50_latency_ms': 0,
+                'p95_latency_ms': 0,
+                'p99_latency_ms': 0,
                 'model_name': model
             }
+            if token_metrics:
+                latencies = [tm.latency_ms for tm in token_metrics]
+                latencies_sorted = sorted(latencies)
+                n = len(latencies_sorted)
+                def pct(p):
+                    if n == 0:
+                        return 0
+                    idx = max(0, min(n - 1, int(round((p/100.0) * n)) - 1))
+                    return latencies_sorted[idx]
+                result_dict['p50_latency_ms'] = pct(50)
+                result_dict['p95_latency_ms'] = pct(95)
+                result_dict['p99_latency_ms'] = pct(99)
             results.append(result_dict)
         
         return results

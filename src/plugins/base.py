@@ -26,6 +26,9 @@ class InferenceResult:
     token_metrics: Optional[List[TokenMetrics]] = None
     cost: Optional[float] = None
     model_name: Optional[str] = None
+    tokens_per_sec: Optional[float] = None
+    cpu_percent: Optional[float] = None
+    mem_rss_mb: Optional[float] = None
 
 
 @dataclass
