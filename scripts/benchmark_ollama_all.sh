@@ -56,11 +56,19 @@ run_dataset_in_batches() {
   local ds="$2"
   local batch_size="$3"
 
+  # For HumanEval, filter out empty lines first
+  local temp_file=""
+  if [[ "$ds" == *"prompts_humaneval.txt" ]]; then
+    temp_file="${ROOT}/datasets/.temp_humaneval_filtered.txt"
+    grep -v '^[[:space:]]*$' "$ds" > "$temp_file"
+    ds="$temp_file"
+  fi
+
   local total
   total=$(wc -l < "$ds" | awk '{print $1}')
   # Apply optional dataset-specific LIMIT_* env caps
   case "$ds" in
-    *prompts_humaneval.txt)
+    *prompts_humaneval.txt|*temp_humaneval_filtered.txt)
       if [ -n "${LIMIT_HUMANEVAL:-}" ] && [ "$LIMIT_HUMANEVAL" -gt 0 ] && [ "$LIMIT_HUMANEVAL" -lt "$total" ]; then
         total="$LIMIT_HUMANEVAL"
       fi
@@ -103,6 +111,11 @@ run_dataset_in_batches() {
     idx=$(( idx + 1 ))
     start=$(( end + 1 ))
   done
+  
+  # Clean up temp file if created
+  if [ -n "$temp_file" ] && [ -f "$temp_file" ]; then
+    rm -f "$temp_file"
+  fi
 }
 
 for model in "${MODELS[@]}"; do
@@ -123,5 +136,8 @@ for model in "${MODELS[@]}"; do
 done
 
 echo "All benchmarks completed. Results saved under ${OUTDIR}/results_*.json"
+echo ""
+echo "Generating overall statistics..."
+python "${ROOT}/scripts/aggregate_results.py" "${OUTDIR}"
 
 
