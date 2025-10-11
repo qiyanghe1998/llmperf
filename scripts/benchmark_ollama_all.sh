@@ -46,7 +46,9 @@ temperature_for() {
 
 timestamp() { date +"%Y%m%d_%H%M%S"; }
 
-OUTDIR="${ROOT}"
+# Create results directory and set output directory
+mkdir -p "${ROOT}/results"
+OUTDIR="${ROOT}/results"
 
 # Helper to run a dataset in batches by writing slice files on the fly
 run_dataset_in_batches() {
