@@ -494,11 +494,18 @@ def stream(model: str, prompt_file: str, output: str, max_tokens: Optional[int],
             # Calculate statistics
             if token_metrics:
                 latencies = [tm.latency_ms for tm in token_metrics]
+                latencies.sort()  # Sort for percentile calculation
                 avg_latency = sum(latencies) / len(latencies)
                 min_latency = min(latencies)
                 max_latency = max(latencies)
+                
+                # Calculate percentiles
+                n = len(latencies)
+                p50_latency = latencies[int(n * 0.5)] if n > 0 else 0
+                p95_latency = latencies[int(n * 0.95)] if n > 0 else 0
+                p99_latency = latencies[int(n * 0.99)] if n > 0 else 0
             else:
-                avg_latency = min_latency = max_latency = 0
+                avg_latency = min_latency = max_latency = p50_latency = p95_latency = p99_latency = 0
             
             # Convert to dict for serialization
             result_dict = {
@@ -507,6 +514,9 @@ def stream(model: str, prompt_file: str, output: str, max_tokens: Optional[int],
                 'avg_latency_ms': avg_latency,
                 'min_latency_ms': min_latency,
                 'max_latency_ms': max_latency,
+                'p50_latency_ms': p50_latency,
+                'p95_latency_ms': p95_latency,
+                'p99_latency_ms': p99_latency,
                 'latency_buckets': latency_buckets,
                 'token_metrics': [
                     {
@@ -557,6 +567,32 @@ def stream(model: str, prompt_file: str, output: str, max_tokens: Optional[int],
     
     click.echo(f"Streaming results saved to {output}")
     click.echo(f"Analyzed {len(results)} prompts")
+    
+    # Print overall statistics
+    if results:
+        all_latencies = []
+        for result in results:
+            if result['token_metrics']:
+                all_latencies.extend([tm['latency_ms'] for tm in result['token_metrics']])
+        
+        if all_latencies:
+            all_latencies.sort()
+            n = len(all_latencies)
+            overall_avg = sum(all_latencies) / n
+            overall_min = min(all_latencies)
+            overall_max = max(all_latencies)
+            overall_p50 = all_latencies[int(n * 0.5)]
+            overall_p95 = all_latencies[int(n * 0.95)]
+            overall_p99 = all_latencies[int(n * 0.99)]
+            
+            click.echo(f"\nOverall Statistics:")
+            click.echo(f"  Total tokens: {n}")
+            click.echo(f"  Avg latency: {overall_avg:.1f}ms")
+            click.echo(f"  Min latency: {overall_min:.1f}ms")
+            click.echo(f"  Max latency: {overall_max:.1f}ms")
+            click.echo(f"  P50 latency: {overall_p50:.1f}ms")
+            click.echo(f"  P95 latency: {overall_p95:.1f}ms")
+            click.echo(f"  P99 latency: {overall_p99:.1f}ms")
 
 
 if __name__ == '__main__':

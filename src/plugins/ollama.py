@@ -36,6 +36,16 @@ class OllamaBackend(BaseLLMBackend):
         start_time = time.time()
         process = psutil.Process() if psutil else None
         
+        # Sample CPU/memory before the call
+        cpu_percent_before = None
+        mem_rss_mb_before = None
+        if process:
+            try:
+                cpu_percent_before = process.cpu_percent(interval=None)
+                mem_rss_mb_before = process.memory_info().rss / (1024 * 1024)
+            except Exception:
+                pass
+        
         payload = {
             "model": self.model_name,
             "prompt": prompt,
@@ -79,14 +89,25 @@ class OllamaBackend(BaseLLMBackend):
                         if isinstance(eval_duration_ns, int) and eval_duration_ns > 0 and output_tokens > 0:
                             tokens_per_sec = (output_tokens / (eval_duration_ns / 1e9))
 
-                        cpu_percent = None
-                        mem_rss_mb = None
+                        # Sample CPU/memory after the call
+                        cpu_percent_after = None
+                        mem_rss_mb_after = None
                         if process:
                             try:
-                                cpu_percent = process.cpu_percent(interval=None)
-                                mem_rss_mb = process.memory_info().rss / (1024 * 1024)
+                                cpu_percent_after = process.cpu_percent(interval=None)
+                                mem_rss_mb_after = process.memory_info().rss / (1024 * 1024)
                             except Exception:
                                 pass
+                        
+                        # Use the higher of before/after for CPU, average for memory
+                        cpu_percent = cpu_percent_after if cpu_percent_after is not None else cpu_percent_before
+                        mem_rss_mb = mem_rss_mb_after if mem_rss_mb_after is not None else mem_rss_mb_before
+                        
+                        # Estimate first token latency (rough approximation)
+                        first_token_latency_ms = None
+                        if isinstance(prompt_eval_duration_ns, int) and prompt_eval_duration_ns > 0:
+                            # First token latency is roughly prompt processing time
+                            first_token_latency_ms = prompt_eval_duration_ns / 1e6  # Convert ns to ms
                         
                         return InferenceResult(
                             text=text,
@@ -94,7 +115,7 @@ class OllamaBackend(BaseLLMBackend):
                             input_tokens=input_tokens,
                             output_tokens=output_tokens,
                             total_latency_ms=total_latency_ms,
-                            first_token_latency_ms=None,
+                            first_token_latency_ms=first_token_latency_ms,
                             model_name=self.model_name,
                             cost=0.0,  # Local inference is free
                             tokens_per_sec=tokens_per_sec,

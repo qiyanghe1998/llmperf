@@ -16,7 +16,6 @@ MODELS=(
   "llama3.1:8b-instruct-q4_K_M"
   "mistral:7b-instruct-q4_K_M"
   "qwen2.5-coder:7b-instruct-q4_K_M"
-  "phi3:mini"
 )
 
 # Process datasets from smallest to largest
