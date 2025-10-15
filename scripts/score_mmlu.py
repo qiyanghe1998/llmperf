@@ -46,6 +46,13 @@ def extract_choice(text: str) -> int:
     if not text:
         return -1
     t = text.strip()
+    # Numeric-first: explicit index 0-3 (preferred in strict mode)
+    m = re.search(r"(?m)(?<!\d)\b([0-3])\b(?!\d)\s*$", t)
+    if m:
+        try:
+            return int(m.group(1))
+        except Exception:
+            pass
     # Common strict formats: "Final Answer: C", "Answer: D"
     m = re.search(r"(?i)(answer\s*[:=]\s*|final\s*answer\s*[:=]\s*)\(?([A-F])\)?", t)
     if m:

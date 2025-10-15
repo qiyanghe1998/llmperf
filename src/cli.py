@@ -222,9 +222,9 @@ def run(model: str, prompt_file: str, output: str, max_tokens: Optional[int],
                 prompt = (
                     f"{prompt}\n\n"
                     "You are answering a multiple-choice question with options labeled A, B, C, D in order. "
-                    "The ground-truth index mapping is A=0, B=1, C=2, D=3. "
-                    "Only output a single capital letter (A, B, C, or D) as the final answer. Do not include any explanation or numbers.\n"
-                    "Final Answer: "
+                    "Output ONLY the numeric index of your chosen option as a single digit: A=0, B=1, C=2, D=3. "
+                    "Do not include any explanation, letters, or extra text.\n"
+                    "Final Answer Index: "
                 )
             click.echo(f"Processing prompt {i+1}/{len(prompts)}...")
             result = await llm_backend.generate(
