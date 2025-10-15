@@ -151,11 +151,13 @@ def cli():
 @click.option('--top-k', type=int, help='Ollama: top-k sampling (top_k)')
 @click.option('--repeat-penalty', type=float, help='Ollama: repetition penalty (repeat_penalty)')
 @click.option('--seed', type=int, help='Ollama: random seed')
+@click.option('--mmlu-strict-answer', is_flag=True, default=False, help='For MMLU-style prompts: force the model to output a single letter A-D only')
 def run(model: str, prompt_file: str, output: str, max_tokens: Optional[int], 
         temperature: Optional[float], backend: str, api_key: Optional[str], 
         base_url: Optional[str], num_ctx: Optional[int], num_thread: Optional[int],
         num_batch: Optional[int], num_gpu: Optional[int], top_p: Optional[float],
-        top_k: Optional[int], repeat_penalty: Optional[float], seed: Optional[int]):
+        top_k: Optional[int], repeat_penalty: Optional[float], seed: Optional[int],
+        mmlu_strict_answer: bool):
     """Single-call inference: measure end-to-end latency and output."""
     
     # Load prompts
@@ -214,6 +216,14 @@ def run(model: str, prompt_file: str, output: str, max_tokens: Optional[int],
                         jsonl_meta.append({})
         
         for i, prompt in enumerate(prompts):
+            # If strict MMLU answer mode is enabled and we have JSONL metadata (implying structured MCQ),
+            # append a strict instruction to return a single-letter answer only.
+            if mmlu_strict_answer and jsonl_meta is not None and i < len(jsonl_meta):
+                prompt = (
+                    f"{prompt}\n\n"
+                    "You are answering a multiple-choice question. Only output a single capital letter (A, B, C, or D) as the final answer. "
+                    "Do not include any explanation.\nFinal Answer: "
+                )
             click.echo(f"Processing prompt {i+1}/{len(prompts)}...")
             result = await llm_backend.generate(
                 prompt=prompt,

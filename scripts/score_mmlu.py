@@ -25,7 +25,16 @@ def load_ground_truth(jsonl_path: str) -> Dict[str, Dict[str, Any]]:
     return gt
 
 def list_result_files(results_dir: str) -> List[str]:
-    return sorted(glob.glob(os.path.join(results_dir, 'results_prompts_mmlu_*.json')))
+    # Support both legacy and new naming schemes
+    patterns = [
+        os.path.join(results_dir, 'results_prompts_mmlu_*.json'),
+        os.path.join(results_dir, 'mmlu*_qwen_*.json'),
+        os.path.join(results_dir, 'mmlu*_*.json'),
+    ]
+    files: List[str] = []
+    for pat in patterns:
+        files.extend(glob.glob(pat))
+    return sorted(set(files))
 
 def extract_choice(text: str) -> int:
     """Extract chosen option index from model output text.
@@ -37,15 +46,22 @@ def extract_choice(text: str) -> int:
     if not text:
         return -1
     t = text.strip()
+    # Common strict formats: "Final Answer: C", "Answer: D"
     m = re.search(r"(?i)(answer\s*[:=]\s*|final\s*answer\s*[:=]\s*)\(?([A-F])\)?", t)
     if m:
         return CHOICE_TO_INDEX.get(m.group(2).upper(), -1)
+    # Letter in parentheses at end: "...(C)"
     m = re.search(r"\(([A-F])\)\s*$", t)
     if m:
         return CHOICE_TO_INDEX.get(m.group(1).upper(), -1)
-    m = re.search(r"\b([A-F])\b\s*$", t)
+    # Lone capital letter at end of text
+    m = re.search(r"\b([A-F])\b\s*\.?\s*$", t)
     if m:
         return CHOICE_TO_INDEX.get(m.group(1).upper(), -1)
+    # Phrases: "The answer is C", "Option C", "Choice C"
+    m = re.search(r"(?i)(the\s+answer\s+is|option|choice)\s*([A-F])\b", t)
+    if m:
+        return CHOICE_TO_INDEX.get(m.group(2).upper(), -1)
     return -1
 
 def score_results(files: List[str], ground_truth: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
