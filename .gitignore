@@ -13,6 +13,8 @@ results*.json
 *_results.json
 openai_results*.json
 ollama_results*.json
+results/
+analysis_summary.csv
 test_config.json
 results_example.json
 results_stream.json
