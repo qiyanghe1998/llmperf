@@ -62,23 +62,38 @@ def download_mmlu():
         print(f"✓ MMLU loaded: {len(dataset)} samples")
         
         # Create prompts from all questions
-        prompts = []
-        for item in dataset:
-            question = item['question']
-            choices = item['choices']
-            
-            # Format as multiple choice
-            prompt = f"{question}\n"
-            for idx, choice in enumerate(choices):
-                prompt += f"{chr(65+idx)}) {choice}\n"
-            
-            prompts.append(prompt.strip())
-        
+        prompts: list[str] = []
+        mmlu_jsonl_path = 'datasets/prompts_mmlu.jsonl'
+        with open(mmlu_jsonl_path, 'w', encoding='utf-8') as jf:
+            for i, item in enumerate(dataset):
+                question = item['question']
+                choices = item['choices']
+                answer = item['answer']  # expected index into choices (0-based)
+                subject = item.get('subject', 'unknown')
+
+                # Format text prompt (for text-mode compatibility)
+                prompt = f"{question}\n"
+                for idx, choice in enumerate(choices):
+                    prompt += f"{chr(65+idx)}) {choice}\n"
+                prompts.append(prompt.strip())
+
+                # Write JSONL with id and metadata
+                record = {
+                    'id': f'mmlu-{i}',
+                    'subject': subject,
+                    'question': question,
+                    'choices': choices,
+                    'answer_index': int(answer)
+                }
+                import json as _json
+                jf.write(_json.dumps(record, ensure_ascii=False) + '\n')
+
         with open('datasets/prompts_mmlu.txt', 'w', encoding='utf-8') as f:
             for prompt in prompts:
                 f.write(prompt + '\n')
-        
+
         print(f"✓ Saved {len(prompts)} prompts to datasets/prompts_mmlu.txt")
+        print(f"✓ Saved JSONL with ids/answers to {mmlu_jsonl_path}")
         return dataset
     
     except Exception as e:

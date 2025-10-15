@@ -1,0 +1,12 @@
+FROM qwen2.5-coder:7b-instruct-q5_K_M
+
+# Goal: balance speed and quality
+
+PARAMETER num_ctx 4096
+PARAMETER num_predict 128
+PARAMETER temperature 0.2
+
+PARAMETER num_thread 8
+PARAMETER num_batch 512
+PARAMETER num_gpu 24
+

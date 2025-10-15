@@ -26,9 +26,36 @@ except ImportError:
 
 
 def load_prompts(prompt_file: str) -> List[str]:
-    """Load prompts from a text file, one per line."""
-    with open(prompt_file, 'r', encoding='utf-8') as f:
-        return [line.strip() for line in f if line.strip()]
+    """Load prompts.
+
+    Supports:
+    - .txt: one prompt per non-empty line
+    - .jsonl: objects with a 'prompt' field (keeps metadata separately)
+    """
+    path = Path(prompt_file)
+    if path.suffix.lower() == '.jsonl':
+        prompts: List[str] = []
+        # Store raw jsonl rows for metadata passthrough
+        os.environ['LLMPERF_JSONL_META'] = prompt_file
+        with open(prompt_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                obj = json.loads(line)
+                if 'prompt' in obj:
+                    prompts.append(str(obj['prompt']))
+                else:
+                    # Fallback: synthesize from question/choices if present
+                    if 'question' in obj and 'choices' in obj:
+                        q = obj['question']
+                        choices = obj['choices']
+                        p = f"{q}\n" + "\n".join([f"{chr(65+i)}) {c}" for i, c in enumerate(choices)])
+                        prompts.append(p)
+        return prompts
+    else:
+        with open(prompt_file, 'r', encoding='utf-8') as f:
+            return [line.strip() for line in f if line.strip()]
 
 
 def load_config(config_file: str = "config.env") -> Dict[str, str]:
@@ -115,9 +142,20 @@ def cli():
               default='auto', help='Backend type')
 @click.option('--api-key', help='API key for the backend')
 @click.option('--base-url', help='Base URL for the backend')
+# Ollama tuning options (no-ops on other backends)
+@click.option('--num-ctx', type=int, help='Ollama: context window tokens (num_ctx)')
+@click.option('--num-thread', type=int, help='Ollama: CPU threads (num_thread)')
+@click.option('--num-batch', type=int, help='Ollama: prompt ingestion batch (num_batch)')
+@click.option('--num-gpu', type=int, help='Ollama: layers offloaded to GPU (num_gpu)')
+@click.option('--top-p', type=float, help='Ollama: nucleus sampling (top_p)')
+@click.option('--top-k', type=int, help='Ollama: top-k sampling (top_k)')
+@click.option('--repeat-penalty', type=float, help='Ollama: repetition penalty (repeat_penalty)')
+@click.option('--seed', type=int, help='Ollama: random seed')
 def run(model: str, prompt_file: str, output: str, max_tokens: Optional[int], 
         temperature: Optional[float], backend: str, api_key: Optional[str], 
-        base_url: Optional[str]):
+        base_url: Optional[str], num_ctx: Optional[int], num_thread: Optional[int],
+        num_batch: Optional[int], num_gpu: Optional[int], top_p: Optional[float],
+        top_k: Optional[int], repeat_penalty: Optional[float], seed: Optional[int]):
     """Single-call inference: measure end-to-end latency and output."""
     
     # Load prompts
@@ -141,17 +179,47 @@ def run(model: str, prompt_file: str, output: str, max_tokens: Optional[int],
     elif config.get('OPENAI_BASE_URL'):
         backend_kwargs['base_url'] = config['OPENAI_BASE_URL']
     
+    # Collect optional Ollama options (passed through only for Ollama backend)
+    ollama_options: Dict[str, Any] = {}
+    if num_ctx is not None: ollama_options['num_ctx'] = num_ctx
+    if num_thread is not None: ollama_options['num_thread'] = num_thread
+    if num_batch is not None: ollama_options['num_batch'] = num_batch
+    if num_gpu is not None: ollama_options['num_gpu'] = num_gpu
+    if top_p is not None: ollama_options['top_p'] = top_p
+    if top_k is not None: ollama_options['top_k'] = top_k
+    if repeat_penalty is not None: ollama_options['repeat_penalty'] = repeat_penalty
+    if seed is not None: ollama_options['seed'] = seed
+
+    if backend == 'ollama' or (backend == 'auto' and 'ollama' in str(type(get_backend(model, backend, **backend_kwargs)))):
+        backend_kwargs['ollama_options'] = ollama_options
+
     llm_backend = get_backend(model, backend, **backend_kwargs)
     
     # Run inference
     async def run_inference():
         results = []
+        # Optional JSONL metadata passthrough: if load_prompts set env var
+        jsonl_meta_path = os.environ.get('LLMPERF_JSONL_META')
+        jsonl_meta = None
+        if jsonl_meta_path and Path(jsonl_meta_path).exists():
+            jsonl_meta = []
+            with open(jsonl_meta_path, 'r', encoding='utf-8') as mf:
+                for line in mf:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        jsonl_meta.append(json.loads(line))
+                    except Exception:
+                        jsonl_meta.append({})
+        
         for i, prompt in enumerate(prompts):
             click.echo(f"Processing prompt {i+1}/{len(prompts)}...")
             result = await llm_backend.generate(
                 prompt=prompt,
                 max_tokens=max_tokens,
-                temperature=temperature
+                temperature=temperature,
+                ollama_options=ollama_options if ollama_options else None
             )
             
             # Convert to dict for serialization
@@ -164,11 +232,25 @@ def run(model: str, prompt_file: str, output: str, max_tokens: Optional[int],
                 'total_latency_ms': result.total_latency_ms,
                 'first_token_latency_ms': result.first_token_latency_ms,
                 'tokens_per_sec': result.tokens_per_sec,
+                'prompt_tokens_per_sec': result.prompt_tokens_per_sec,
                 'cpu_percent': result.cpu_percent,
                 'mem_rss_mb': result.mem_rss_mb,
+                'kv_cache_mb_estimate': result.kv_cache_mb_estimate,
+                'ctx_utilization': result.ctx_utilization,
+                'cpu_user_s': result.cpu_user_s,
+                'cpu_system_s': result.cpu_system_s,
                 'cost': result.cost,
                 'model_name': result.model_name
             }
+            # Attach metadata if available
+            if jsonl_meta and i < len(jsonl_meta):
+                md = jsonl_meta[i]
+                for key in ('id', 'subject', 'answer_index'):
+                    if key in md:
+                        result_dict[key] = md[key]
+            # For traceability, include run-time options used (if any)
+            if ollama_options:
+                result_dict['ollama_options'] = ollama_options
             results.append(result_dict)
         
         return results

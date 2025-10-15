@@ -30,6 +30,7 @@ class OllamaBackend(BaseLLMBackend):
         prompt: str, 
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
+        ollama_options: Optional[Dict[str, Any]] = None,
         **kwargs
     ) -> InferenceResult:
         """Generate text from a prompt using Ollama API."""
@@ -59,6 +60,9 @@ class OllamaBackend(BaseLLMBackend):
         if temperature is not None:
             payload["options"] = payload.get("options", {})
             payload["options"]["temperature"] = temperature
+        if ollama_options:
+            payload["options"] = payload.get("options", {})
+            payload["options"].update(ollama_options)
         
         try:
             async with aiohttp.ClientSession() as session:
@@ -89,26 +93,53 @@ class OllamaBackend(BaseLLMBackend):
                         if isinstance(eval_duration_ns, int) and eval_duration_ns > 0 and output_tokens > 0:
                             tokens_per_sec = (output_tokens / (eval_duration_ns / 1e9))
 
-                        # Sample CPU/memory after the call
+                        # Sample CPU/memory after the call and CPU times
                         cpu_percent_after = None
                         mem_rss_mb_after = None
+                        cpu_user_s = None
+                        cpu_system_s = None
                         if process:
                             try:
                                 cpu_percent_after = process.cpu_percent(interval=None)
                                 mem_rss_mb_after = process.memory_info().rss / (1024 * 1024)
+                                ct = process.cpu_times()
+                                cpu_user_s = getattr(ct, 'user', 0.0)
+                                cpu_system_s = getattr(ct, 'system', 0.0)
                             except Exception:
                                 pass
                         
-                        # Use the higher of before/after for CPU, average for memory
+                        # Use the higher of before/after for CPU, last observed for memory
                         cpu_percent = cpu_percent_after if cpu_percent_after is not None else cpu_percent_before
                         mem_rss_mb = mem_rss_mb_after if mem_rss_mb_after is not None else mem_rss_mb_before
                         
-                        # Estimate first token latency (rough approximation)
+                        # Estimate first token latency (prompt processing time)
                         first_token_latency_ms = None
                         if isinstance(prompt_eval_duration_ns, int) and prompt_eval_duration_ns > 0:
-                            # First token latency is roughly prompt processing time
-                            first_token_latency_ms = prompt_eval_duration_ns / 1e6  # Convert ns to ms
-                        
+                            first_token_latency_ms = prompt_eval_duration_ns / 1e6  # ns -> ms
+
+                        # Prompt-side tokens/sec
+                        prompt_tokens_per_sec = None
+                        if isinstance(prompt_eval_duration_ns, int) and prompt_eval_duration_ns > 0 and input_tokens > 0:
+                            prompt_tokens_per_sec = (input_tokens / (prompt_eval_duration_ns / 1e9))
+
+                        # Estimate KV cache memory and context utilization if num_ctx provided
+                        kv_cache_mb_estimate = None
+                        ctx_utilization = None
+                        num_ctx = None
+                        opts = payload.get('options', {})
+                        if isinstance(opts, dict) and 'num_ctx' in opts:
+                            try:
+                                num_ctx = int(opts['num_ctx'])
+                            except Exception:
+                                num_ctx = None
+                        if isinstance(num_ctx, int) and num_ctx > 0:
+                            try:
+                                bytes_per_token = 2048  # heuristic placeholder for comparison across runs
+                                ctx_utilization = min(1.0, (total_tokens / max(1, num_ctx)))
+                                kv_cache_mb_estimate = (bytes_per_token * num_ctx) / (1024 * 1024)
+                            except Exception:
+                                kv_cache_mb_estimate = None
+
                         return InferenceResult(
                             text=text,
                             total_tokens=total_tokens,
@@ -117,10 +148,15 @@ class OllamaBackend(BaseLLMBackend):
                             total_latency_ms=total_latency_ms,
                             first_token_latency_ms=first_token_latency_ms,
                             model_name=self.model_name,
-                            cost=0.0,  # Local inference is free
+                            cost=0.0,
                             tokens_per_sec=tokens_per_sec,
                             cpu_percent=cpu_percent,
-                            mem_rss_mb=mem_rss_mb
+                            mem_rss_mb=mem_rss_mb,
+                            prompt_tokens_per_sec=prompt_tokens_per_sec,
+                            kv_cache_mb_estimate=kv_cache_mb_estimate,
+                            ctx_utilization=ctx_utilization,
+                            cpu_user_s=cpu_user_s,
+                            cpu_system_s=cpu_system_s
                         )
                     else:
                         error_text = await response.text()

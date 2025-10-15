@@ -1,0 +1,14 @@
+FROM qwen2.5-coder:7b-instruct-q8_0
+
+# Goal: prioritize quality (may be tight on 16 GB)
+
+PARAMETER num_ctx 4096
+PARAMETER num_predict 128
+PARAMETER temperature 0.2
+
+PARAMETER num_thread 8
+PARAMETER num_batch 256
+
+# Lower GPU offload to avoid OOM if needed
+PARAMETER num_gpu 16
+

@@ -29,6 +29,11 @@ class InferenceResult:
     tokens_per_sec: Optional[float] = None
     cpu_percent: Optional[float] = None
     mem_rss_mb: Optional[float] = None
+    prompt_tokens_per_sec: Optional[float] = None
+    kv_cache_mb_estimate: Optional[float] = None
+    ctx_utilization: Optional[float] = None
+    cpu_user_s: Optional[float] = None
+    cpu_system_s: Optional[float] = None
 
 
 @dataclass

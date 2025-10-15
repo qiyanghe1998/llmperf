@@ -1,0 +1,19 @@
+FROM qwen2.5-coder:7b-instruct-q4_K_M
+
+# Goal: maximize speed on 16 GB RAM while keeping stability
+# Notes: lower context and moderate GPU offload reduce memory pressure
+
+PARAMETER num_ctx 4096
+PARAMETER num_predict 128
+PARAMETER temperature 0.2
+
+# CPU threads for Apple M4 (tune 6/8/10)
+PARAMETER num_thread 8
+
+# Prompt ingestion batch size (tune 256/512)
+PARAMETER num_batch 512
+
+# Metal offload: number of layers on GPU (use -1 for auto)
+# Try 20–28 for 7B on 16 GB; increase if stable
+PARAMETER num_gpu 24
+

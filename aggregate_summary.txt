@@ -1,0 +1,1 @@
+Usage: python aggregate_results.py <results_directory>
