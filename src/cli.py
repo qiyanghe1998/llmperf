@@ -221,8 +221,10 @@ def run(model: str, prompt_file: str, output: str, max_tokens: Optional[int],
             if mmlu_strict_answer and jsonl_meta is not None and i < len(jsonl_meta):
                 prompt = (
                     f"{prompt}\n\n"
-                    "You are answering a multiple-choice question. Only output a single capital letter (A, B, C, or D) as the final answer. "
-                    "Do not include any explanation.\nFinal Answer: "
+                    "You are answering a multiple-choice question with options labeled A, B, C, D in order. "
+                    "The ground-truth index mapping is A=0, B=1, C=2, D=3. "
+                    "Only output a single capital letter (A, B, C, or D) as the final answer. Do not include any explanation or numbers.\n"
+                    "Final Answer: "
                 )
             click.echo(f"Processing prompt {i+1}/{len(prompts)}...")
             result = await llm_backend.generate(
